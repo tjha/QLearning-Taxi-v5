@@ -345,7 +345,7 @@ def figure_9_2(true_value):
     #figure_9_2_left(true_value)
     figure_9_2_right(true_value)
 
-    plt.savefig('FigureExample.png')
+    plt.savefig('FigureExample2.png')
     plt.close()
 
 # Figure 9.5, Fourier basis and polynomials
@@ -448,6 +448,8 @@ def figure_9_10(true_value):
 
 if __name__ == '__main__':
     true_value = compute_true_value()
+
+    true_value = np.load('trueStateValue.npy')
 
     #figure_9_1(true_value)
     figure_9_2(true_value)

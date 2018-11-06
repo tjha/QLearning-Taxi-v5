@@ -230,16 +230,15 @@ def modified_dynaq(env1, env2, n=10,gamma=0.5,alpha=1,epsilon=0.1,runs=1,episode
 class ValueFunction:
     def __init__(self, num_of_groups):
         self.num_of_groups = num_of_groups
-        self.group_size = 1000
+        self.group_size = 1000 // num_of_groups
         self.params = np.zeros(num_of_groups)
 
     def value(self, state):
-        if state in [0, 1002]:
+        if state in [0,1001]:
             return 0
         group_index = (state - 1) // self.group_size
         return self.params[group_index]
 
-    # update parameters
     def update(self, delta, state):
         group_index = (state - 1) // self.group_size
         self.params[group_index] += delta
@@ -253,95 +252,20 @@ def step(state, action):
     step = np.random.randint(1, 100 + 1)
     step *= action
     state += step
-    state = max(min(state, 1000 + 1), 0)
+    state = max(min(state, 1001), 0)
     if state == 0:
         reward = -1
-    elif state == 1000 + 1:
+    elif state == 1001:
         reward = 1
     else:
         reward = 0
     return state, reward
 
-# Random Walk Algorithm
-def randomWalk(alpha, n, tsv, runs=100, episodes=10):
-
-    rms = 0
-    for run in range(runs):
-        for episode in range(episodes):
-            value_function = ValueFunction(20)
-
-            # initial starting state
-            state = 500
-
-            # arrays to store states and rewards for an episode
-            # space isn't a major consideration, so I didn't use the mod trick
-            states = [state]
-            rewards = [0]
-
-            # track the time
-            time = 0
-
-            # the length of this episode
-            T = float('inf')
-            while True:
-                # go to next time step
-                time += 1
-
-                if time < T:
-                    # choose an action randomly
-                    action = get_action()
-                    next_state, reward = step(state, action)
-
-                    # store new state and new reward
-                    states.append(next_state)
-                    rewards.append(reward)
-
-                    if next_state in [0, 1002]:
-                        T = time
-
-                # get the time of the state to update
-                update_time = time - n
-                if update_time >= 0:
-                    returns = 0.0
-                    # calculate corresponding rewards
-                    for t in range(update_time + 1, min(T, update_time + n) + 1):
-                        returns += rewards[t]
-                    # add state value to the return
-                    if update_time + n <= T:
-                        returns += value_function.value(states[update_time + n])
-                    state_to_update = states[update_time]
-                    # update the value function
-                    if not state_to_update in [0,1002]:
-                        delta = alpha * (returns - value_function.value(state_to_update))
-                        value_function.update(delta, state_to_update)
-                if update_time == T - 1:
-                    break
-                state = next_state
-                
-            state_value = np.asarray([value_function.value(i) for i in np.arange(1, 1000 + 1)])
-            rms += np.sqrt(np.sum(np.power(state_value - tsv[1: -1], 2)) / 1000) / runs / episodes
-
-
-        
-
-        # if run % 10 == 0:
-        #     print("Finished run: " + str(run))
-
-    print(rms)
-    return rms
-
 # other
-def semi_gradient_temporal_difference(value_function, n, alpha):
-
-    # initial starting state
+def randomWalk2(value_function, n, alpha):
     state = 500
-
-    # arrays to store states and rewards for an episode
-    # space isn't a major consideration, so I didn't use the mod trick
     states = [state]
     rewards = [0]
-
-    # track the time
     time = 0
 
     # the length of this episode
@@ -359,7 +283,7 @@ def semi_gradient_temporal_difference(value_function, n, alpha):
             states.append(next_state)
             rewards.append(reward)
 
-            if next_state in [0, 1002]:
+            if next_state in [0, 1001]:
                 T = time
 
         # get the time of the state to update
@@ -374,7 +298,7 @@ def semi_gradient_temporal_difference(value_function, n, alpha):
                 returns += value_function.value(states[update_time + n])
             state_to_update = states[update_time]
             # update the value function
-            if not state_to_update in [0,1002]:
+            if not state_to_update in [0,1001]:
                 delta = alpha * (returns - value_function.value(state_to_update))
                 value_function.update(delta, state_to_update)
         if update_time == T - 1:
@@ -449,37 +373,37 @@ if __name__ == '__main__':
     print(ns)
     print(alphas)
 
-    # dynaq_cum_steps_avg = np.zeros(shape=(100,))
-    # episodes = np.arange(len(dynaq_cum_steps_avg))
-    # for n in ns:
-    #     print(n)
-    #     lab = "n=" + str(n)
-    #     errorset = []
-    #     for alph in alpha:
-    #         print(alph)
-    #         rms = randomWalk(alph, n, tsv)
-    #         errorset.append(rms)
-    #     plt.plot(alpha,errorset, label=lab)
-    #     break
-    # plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-    # plt.savefig("FigureX")
+    # # dynaq_cum_steps_avg = np.zeros(shape=(100,))
+    # # episodes = np.arange(len(dynaq_cum_steps_avg))
+    # # for n in ns:
+    # #     print(n)
+    # #     lab = "n=" + str(n)
+    # #     errorset = []
+    # #     for alph in alpha:
+    # #         print(alph)
+    # #         rms = randomWalk(alph, n, tsv)
+    # #         errorset.append(rms)
+    # #     plt.plot(alpha,errorset, label=lab)
+    # #     break
+    # # plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    # # plt.savefig("FigureX")
 
 
-    # track the errors for each (step, alpha) combination
+    #track the errors for each (step, alpha) combination
     errors = np.zeros((len(ns), len(alphas)))
-    for run in range(10):
+    for run in range(100):
         for step_ind, n in zip(range(len(ns)), ns):
             for alpha_ind, alpha in zip(range(len(alphas)), alphas):
                 # we have 20 aggregations in this example
                 value_function = ValueFunction(20)
                 for ep in range(0, 10):
-                    semi_gradient_temporal_difference(value_function, n, alpha)
+                    randomWalk2(value_function, n, alpha)
                     # calculate the RMS error
-                    state_value = np.asarray([value_function.value(i) for i in np.arange(1, 1000 + 1)])
+                    state_value = np.asarray([value_function.value(i) for i in np.arange(1, 1001)])
                     errors[step_ind, alpha_ind] += np.sqrt(np.sum(np.power(state_value - tsv[1: -1], 2)) / 1000)
         print(run)
     # take average
-    errors /= 10 * 10
+    errors /= 10 * 100
     # truncate the error
     for i in range(len(ns)):
         plt.plot(alphas, errors[i, :], label='n = ' + str(ns[i]))
