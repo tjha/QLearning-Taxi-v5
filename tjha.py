@@ -17,7 +17,6 @@ import copy
 import mytaxi
 import math
 import matplotlib.pyplot as plt
-import trueStateValue as tsv
 
 # Environment for Taxi-v4
 ENV4 = gym.make('Taxi-v4').unwrapped
@@ -228,70 +227,265 @@ def modified_dynaq(env1, env2, n=10,gamma=0.5,alpha=1,epsilon=0.1,runs=1,episode
                 cum_steps[idx] = counter + cum_steps[idx - 1]
     return Q, cum_steps
 
+class ValueFunction:
+    def __init__(self, num_of_groups):
+        self.num_of_groups = num_of_groups
+        self.group_size = 1000
+        self.params = np.zeros(num_of_groups)
+
+    def value(self, state):
+        if state in [0, 1002]:
+            return 0
+        group_index = (state - 1) // self.group_size
+        return self.params[group_index]
+
+    # update parameters
+    def update(self, delta, state):
+        group_index = (state - 1) // self.group_size
+        self.params[group_index] += delta
+
+def get_action():
+    if np.random.binomial(1, 0.5) == 1:
+        return 1
+    return -1
+
+def step(state, action):
+    step = np.random.randint(1, 100 + 1)
+    step *= action
+    state += step
+    state = max(min(state, 1000 + 1), 0)
+    if state == 0:
+        reward = -1
+    elif state == 1000 + 1:
+        reward = 1
+    else:
+        reward = 0
+    return state, reward
+
+# Random Walk Algorithm
+def randomWalk(alpha, n, tsv, runs=100, episodes=10):
+
+    rms = 0
+    for run in range(runs):
+        for episode in range(episodes):
+            value_function = ValueFunction(20)
+
+            # initial starting state
+            state = 500
+
+            # arrays to store states and rewards for an episode
+            # space isn't a major consideration, so I didn't use the mod trick
+            states = [state]
+            rewards = [0]
+
+            # track the time
+            time = 0
+
+            # the length of this episode
+            T = float('inf')
+            while True:
+                # go to next time step
+                time += 1
+
+                if time < T:
+                    # choose an action randomly
+                    action = get_action()
+                    next_state, reward = step(state, action)
+
+                    # store new state and new reward
+                    states.append(next_state)
+                    rewards.append(reward)
+
+                    if next_state in [0, 1002]:
+                        T = time
+
+                # get the time of the state to update
+                update_time = time - n
+                if update_time >= 0:
+                    returns = 0.0
+                    # calculate corresponding rewards
+                    for t in range(update_time + 1, min(T, update_time + n) + 1):
+                        returns += rewards[t]
+                    # add state value to the return
+                    if update_time + n <= T:
+                        returns += value_function.value(states[update_time + n])
+                    state_to_update = states[update_time]
+                    # update the value function
+                    if not state_to_update in [0,1002]:
+                        delta = alpha * (returns - value_function.value(state_to_update))
+                        value_function.update(delta, state_to_update)
+                if update_time == T - 1:
+                    break
+                state = next_state
+                
+            state_value = np.asarray([value_function.value(i) for i in np.arange(1, 1000 + 1)])
+            rms += np.sqrt(np.sum(np.power(state_value - tsv[1: -1], 2)) / 1000) / runs / episodes
+
+
+        
+
+        # if run % 10 == 0:
+        #     print("Finished run: " + str(run))
+
+    print(rms)
+    return rms
+
+# other
+def semi_gradient_temporal_difference(value_function, n, alpha):
+
+    # initial starting state
+    state = 500
+
+    # arrays to store states and rewards for an episode
+    # space isn't a major consideration, so I didn't use the mod trick
+    states = [state]
+    rewards = [0]
+
+    # track the time
+    time = 0
+
+    # the length of this episode
+    T = float('inf')
+    while True:
+        # go to next time step
+        time += 1
+
+        if time < T:
+            # choose an action randomly
+            action = get_action()
+            next_state, reward = step(state, action)
+
+            # store new state and new reward
+            states.append(next_state)
+            rewards.append(reward)
+
+            if next_state in [0, 1002]:
+                T = time
+
+        # get the time of the state to update
+        update_time = time - n
+        if update_time >= 0:
+            returns = 0.0
+            # calculate corresponding rewards
+            for t in range(update_time + 1, min(T, update_time + n) + 1):
+                returns += rewards[t]
+            # add state value to the return
+            if update_time + n <= T:
+                returns += value_function.value(states[update_time + n])
+            state_to_update = states[update_time]
+            # update the value function
+            if not state_to_update in [0,1002]:
+                delta = alpha * (returns - value_function.value(state_to_update))
+                value_function.update(delta, state_to_update)
+        if update_time == T - 1:
+            break
+        state = next_state
+                
+
 if __name__ == '__main__':
 
     # Part (a)
     print("Training using Tabular Dyna-Q for 100 episodes using Taxi-v4")
     # Average results over 20 runs
-    #dynaq_Q_avg = 0
-    #qlearn_Q_avg = 0
+    dynaq_Q_avg = 0
+    qlearn_Q_avg = 0
+
+    dynaq_cum_steps_avg = np.zeros(shape=(100,))
+    qlearn_cum_steps_avg = np.zeros(shape=(100,))
+
+    for i in range(20):
+        print("Performing run: " + str(i + 1))
+        # Randomize seeds so runs are independent
+        np.random.seed(i)
+        ENV4.seed(i)
+        _, dynaq_cum_steps = dynaq(ENV4)
+        _, qlearn_cum_steps = qlearn(ENV4)
+        # Update averages
+        #dynaq_Q_avg += dynaq_Q / 20.0
+        #qlearn_Q_avg += qlearn_Q / 20.0
+        dynaq_cum_steps_avg += np.divide(dynaq_cum_steps, 20.0)
+        qlearn_cum_steps_avg += np.divide(qlearn_cum_steps, 20.0)
+
+    # Compare results with Q learning implementation used in hw2 in plot
+    # Generate plots for Question 1 Part(a)
+    episodes = np.arange(len(qlearn_cum_steps_avg))
+    plt.plot(episodes,qlearn_cum_steps_avg, 'r')
+    plt.plot(episodes, dynaq_cum_steps_avg, 'b')
+    plt.xlabel("episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.ylabel("cum_steps", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.title("Dynaq and Q-learn cum_steps vs. episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.savefig("Figure1")
+
+
+    dynaq_cum_steps_avg1 = np.zeros(shape=(300,))
+    dynaq_cum_steps_avg2 = np.zeros(shape=(300,))
+    for i in range(5):
+        print("Performing run: " + str(i + 1))
+        # Randomize seeds so runs are independent
+        np.random.seed(i)
+        ENV4.seed(i)
+        ENV5.seed(i)
+        _, dynaq_cum_steps1 = original_dynaq(ENV4, ENV5)
+        _, dynaq_cum_steps2 = modified_dynaq(ENV4, ENV5)
+        # Update averages
+        #dynaq_Q_avg += dynaq_Q / 20.0
+        #qlearn_Q_avg += qlearn_Q / 20.0
+        dynaq_cum_steps_avg1 += np.divide(dynaq_cum_steps1, 5.0)
+        dynaq_cum_steps_avg2 += np.divide(dynaq_cum_steps2, 5.0)
+
+    episodes = np.arange(len(dynaq_cum_steps_avg1))
+    plt.plot(episodes,dynaq_cum_steps_avg1, 'r')
+    plt.plot(episodes, dynaq_cum_steps_avg2, 'b')
+    plt.xlabel("episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.ylabel("cum_steps", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.title("Original/Modified DynaQ cum_steps vs. episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.savefig("Figure2")
+
+    plt.figure(figsize=(20,10))
+    alphas = np.arange(0,1.1, 0.1)
+    ns = np.power(2,np.arange(0,10))
+    tsv = np.load('trueStateValue.npy')
+
+    print(ns)
+    print(alphas)
 
     # dynaq_cum_steps_avg = np.zeros(shape=(100,))
-    # qlearn_cum_steps_avg = np.zeros(shape=(100,))
-
-    # for i in range(20):
-    #     print("Performing run: " + str(i + 1))
-    #     # Randomize seeds so runs are independent
-    #     np.random.seed(i)
-    #     ENV4.seed(i)
-    #     _, dynaq_cum_steps = dynaq(ENV4)
-    #     _, qlearn_cum_steps = qlearn(ENV4)
-    #     # Update averages
-    #     #dynaq_Q_avg += dynaq_Q / 20.0
-    #     #qlearn_Q_avg += qlearn_Q / 20.0
-    #     dynaq_cum_steps_avg += np.divide(dynaq_cum_steps, 20.0)
-    #     qlearn_cum_steps_avg += np.divide(qlearn_cum_steps, 20.0)
-
-    # # Compare results with Q learning implementation used in hw2 in plot
-    # # Generate plots for Question 1 Part(a)
-    # episodes = np.arange(len(qlearn_cum_steps_avg))
-    # plt.plot(episodes,qlearn_cum_steps_avg, 'r')
-    # plt.plot(episodes, dynaq_cum_steps_avg, 'b')
-    # plt.xlabel("episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
-    # plt.ylabel("cum_steps", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
-    # plt.title("Dynaq and Q-learn cum_steps over episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
-    # plt.savefig("Figure1")
+    # episodes = np.arange(len(dynaq_cum_steps_avg))
+    # for n in ns:
+    #     print(n)
+    #     lab = "n=" + str(n)
+    #     errorset = []
+    #     for alph in alpha:
+    #         print(alph)
+    #         rms = randomWalk(alph, n, tsv)
+    #         errorset.append(rms)
+    #     plt.plot(alpha,errorset, label=lab)
+    #     break
+    # plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    # plt.savefig("FigureX")
 
 
-    # dynaq_cum_steps_avg1 = np.zeros(shape=(300,))
-    # dynaq_cum_steps_avg2 = np.zeros(shape=(300,))
-    # for i in range(5):
-    #     print("Performing run: " + str(i + 1))
-    #     # Randomize seeds so runs are independent
-    #     np.random.seed(i)
-    #     ENV4.seed(i)
-    #     ENV5.seed(i)
-    #     _, dynaq_cum_steps1 = original_dynaq(ENV4, ENV5)
-    #     _, dynaq_cum_steps2 = modified_dynaq(ENV4, ENV5)
-    #     # Update averages
-    #     #dynaq_Q_avg += dynaq_Q / 20.0
-    #     #qlearn_Q_avg += qlearn_Q / 20.0
-    #     dynaq_cum_steps_avg1 += np.divide(dynaq_cum_steps1, 5.0)
-    #     dynaq_cum_steps_avg2 += np.divide(dynaq_cum_steps2, 5.0)
-
-    # episodes = np.arange(len(dynaq_cum_steps_avg1))
-    # plt.plot(episodes,dynaq_cum_steps_avg1, 'r')
-    # plt.plot(episodes, dynaq_cum_steps_avg2, 'b')
-    # plt.xlabel("episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
-    # plt.ylabel("cum_steps", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
-    # plt.title("Dynaq and Modified DynaQ cum_steps over episodes", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
-    # plt.savefig("Figure2")
-
-    alpha = np.arange(0,1.1, 0.1)
-    n = np.power(2,np.arange(0,10))
-
-    print(alpha)
-    print(n)
-
-
-
+    # track the errors for each (step, alpha) combination
+    errors = np.zeros((len(ns), len(alphas)))
+    for run in range(10):
+        for step_ind, n in zip(range(len(ns)), ns):
+            for alpha_ind, alpha in zip(range(len(alphas)), alphas):
+                # we have 20 aggregations in this example
+                value_function = ValueFunction(20)
+                for ep in range(0, 10):
+                    semi_gradient_temporal_difference(value_function, n, alpha)
+                    # calculate the RMS error
+                    state_value = np.asarray([value_function.value(i) for i in np.arange(1, 1000 + 1)])
+                    errors[step_ind, alpha_ind] += np.sqrt(np.sum(np.power(state_value - tsv[1: -1], 2)) / 1000)
+        print(run)
+    # take average
+    errors /= 10 * 10
+    # truncate the error
+    for i in range(len(ns)):
+        plt.plot(alphas, errors[i, :], label='n = ' + str(ns[i]))
+    plt.xlabel("alpha", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.ylabel("Average RMS", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.title("Recreation of Fig 9.2", fontdict={'fontname':'DejaVu Sans', 'size':'20'})
+    plt.ylim([0.25, 0.55])
+    plt.legend()
+    plt.savefig("FigureY")
